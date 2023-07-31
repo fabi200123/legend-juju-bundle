@@ -59,28 +59,40 @@ jobs:
 
             # Upload image to Charmhub. CHARMCRAFT_AUTH should be loaded in the environment, and
             # it should have sufficient permissions to push the resource.
-            charmcraft upload-resource --quiet "${charm_name}" "${charm_resource}" --image=${image_sha}
+            # charmcraft upload-resource --quiet "${charm_name}" "${charm_resource}" --image=${image_sha}
 
             # Get the last revision number and image revision number and release.
             charm_rev=$(charmcraft revisions "${charm_name}" | awk 'FNR == 2 {print $1}')
             img_rev=$(charmcraft resource-revisions "${charm_name}" "${charm_resource}" | awk 'FNR == 2 {print $1}')
-            charmcraft release "${charm_name}" --revision=${charm_rev} --channel="${release_short}/edge" --resource="${charm_resource}:${img_rev}"
+            # charmcraft release "${charm_name}" --revision=${charm_rev} --channel="${release_short}/edge" --resource="${charm_resource}:${img_rev}"
            
             # Also release it as the latest.
-            charmcraft release "${charm_name}" --revision=${charm_rev} --channel=edge --resource="${charm_resource}:${img_rev}"
+            echo "charmcraft release ${charm_name} --revision=${charm_rev} --channel=edge --resource=${charm_resource}:${img_rev}"
           }
 
-          for release in $(ls $GITHUB_WORKSPACE/legend/releases/)
-                    
-          do
-            # If there was a new Legend release yesterday, release it to Charmhub
-            if [[ "$release" == $(date +%Y-%m-%d -d "yesterday") ]];          
+          previous_release=""
+          
+          for release in $(ls $GITHUB_WORKSPACE/legend/releases/ | sort -r)
+          
+           do
+            echo "Treating ${release}..."
+            # If the current release was already published, skip.
+            if git show-ref --verify --quiet "refs/heads/release-${release}"
             then
-              echo "Release ${release} is from YESTERDAY and will be uploaded to Charmhub"
-            else
               continue
             fi
-
+            if [ -n "$previous_release" ]
+            then
+              release_date_previous=$(echo "${previous_release}" | cut -d_ -f1)
+              release_date_current=$(echo "${release}" | cut -d_ -f1)
+              # Compare the two release dates and skip if equal
+              if [ "$release_date_previous" == "$release_date_current" ]
+              then
+                continue
+              fi
+            fi
+            previous_release=${release}
+            
             release_charm_with_image finos-legend-studio-k8s studio-image finos/legend-studio "${release}"
             release_charm_with_image finos-legend-engine-k8s engine-image finos/legend-engine-server "${release}"
             release_charm_with_image finos-legend-sdlc-k8s sdlc-image finos/legend-sdlc-server "${release}"
@@ -88,7 +100,7 @@ jobs:
             # Dispatch the create-release.yaml workflow, which will create the release branch,
             # create a commit that will make bundle.yaml point towards this release, and publish
             # the bundle into Charmhub.
-            gh workflow run create_release.yaml -f release="${release}"
+            # gh workflow run create_release.yaml -f release="${release}"
 
             # Wait until the branch is created
             branch_url_code=$(curl -s -o /dev/null -w "%{http_code}" https://github.com/finos/legend-juju-bundle/tree/release-${release})
@@ -105,10 +117,10 @@ jobs:
            sdlc_version=$(cat "${release_file}" | jq --raw-output ".core.\"finos/legend-sdlc-server\"")
            studio_version=$(cat "${release_file}" | jq --raw-output ".core.\"finos/legend-studio\"")
            
-           gh workflow run create_overlay.yaml -f release="${release}" \
-             -f engine-image="finos/legend-engine-server:${engine_version}" \
-             -f sdlc-image="finos/legend-sdlc-server:${sdlc_version}" \
-             -f studio-image="finos/legend-studio:${studio_version}"
+          # gh workflow run create_overlay.yaml -f release="${release}" \
+          #   -f engine-image="finos/legend-engine-server:${engine_version}" \
+          #   -f sdlc-image="finos/legend-sdlc-server:${sdlc_version}" \
+          #   -f studio-image="finos/legend-studio:${studio_version}"
           done
       - name: Send Email on Failure
         if: failure() && github.event_name == 'schedule'
