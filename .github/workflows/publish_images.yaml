@@ -72,7 +72,9 @@ jobs:
 
           previous_release=""
           
-          for release in $(ls $GITHUB_WORKSPACE/legend/releases/ | sort -r)
+          # Reverting the order, so if there are multiple releases on the same month,
+          # it is published only the latest version
+          for release in $(ls -r $GITHUB_WORKSPACE/legend/releases/ | gawk '{ if ($1 > "2022-04-01") { print } }' | uniq -w 7 | sort)
           
            do
             echo "Treating ${release}..."
@@ -81,15 +83,13 @@ jobs:
             then
               continue
             fi
-            if [ -n "$previous_release" ]
+            release_date_previous=$(echo "${previous_release}" | cut -d_ -f1)
+            release_date_current=$(echo "${release}" | cut -d_ -f1)
+            # Compare the two release dates and skip if equal
+            if [ "$release_date_previous" == "$release_date_current" ]
             then
-              release_date_previous=$(echo "${previous_release}" | cut -d_ -f1)
-              release_date_current=$(echo "${release}" | cut -d_ -f1)
-              # Compare the two release dates and skip if equal
-              if [ "$release_date_previous" == "$release_date_current" ]
-              then
-                continue
-              fi
+            echo "Skipping ${release_date_current}..."
+              continue
             fi
             previous_release=${release}
             
